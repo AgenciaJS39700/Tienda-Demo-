@@ -1,0 +1,14 @@
+{
+  "name": "tienda-demo",
+  "main": "worker.js",
+  "compatibility_date": "2026-04-04",
+  "assets": { "directory": "./" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tienda-demo",
+      "database_id": "e3253bea-4188-44be-8f9b-ce515d437380"
+    }
+  ],
+  "observability": { "enabled": true }
+}
