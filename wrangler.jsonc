@@ -10,6 +10,6 @@
       "database_id": "e3253bea-4188-44be-8f9b-ce515d437380"
     }
   ],
-  "vars": { "MAIL_FROM": "agencia39700@gmail.com", "MAIL_FROM_NAME": "Horizonte", "BREVO_LIST_ID": "5", "STORE_NAME": "Horizonte" },
+  "vars": { "MAIL_FROM": "agencia39700@gmail.com", "MAIL_FROM_NAME": "Horizonte", "BREVO_LIST_ID": "5", "STORE_NAME": "Horizonte", "OWNER_EMAIL": "agencia39700@gmail.com", "SHOP_LEGAL_NAME": "Horizonte Store (tienda de demostración)", "SHOP_NIF": "B00000000 (ficticio)", "SHOP_ADDRESS": "Calle de Ejemplo 1, 00000 Ciudad (datos ficticios)" },
   "observability": { "enabled": true }
 }

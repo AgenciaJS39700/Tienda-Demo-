@@ -1,10 +1,12 @@
 // worker.js · API de la tienda demo (Cloudflare Workers + D1 + Stripe Checkout)
 // Rutas:  GET /api/products · POST /api/checkout · POST /api/webhook · GET /api/order · POST /api/cancel · /api/admin/*
-//         /api/auth/{register,login,logout,me,forgot,reset,marketing,delete}
+//         /api/auth/{register,login,logout,me,forgot,reset,marketing,delete} · GET /api/shop · GET /img/*
 // Secretos (Cloudflare → Worker → Settings → Variables and Secrets):
 //   STRIPE_SECRET_KEY · STRIPE_WEBHOOK_SECRET · ADMIN_TOKEN
 //   BREVO_API_KEY (opcional: sin ella la tienda funciona pero no envía correos)
 // Variables (texto): MAIL_FROM · MAIL_FROM_NAME · BREVO_LIST_ID · STORE_NAME · SITE_URL (opcional) · PBKDF2_ITER (opcional)
+//   OWNER_EMAIL (aviso de pedidos) · SHOP_LEGAL_NAME · SHOP_NIF · SHOP_ADDRESS · SHOP_EMAIL · SHOP_PHONE (textos legales)
+// Binding R2: IMAGES (fotos de producto)
 
 const STRIPE_API = "https://api.stripe.com/v1";
 const HOLD_MINUTES = 30;          // Stripe exige entre 30 minutos y 24 horas
@@ -16,6 +18,10 @@ const RATES = {
   DE: { label: "Alemania", cents: 795, freeFrom: 9000 },
   IT: { label: "Italia", cents: 795, freeFrom: 9000 },
 };
+const KINDS = ["tee", "sweat", "hoodie", "jeans", "jacket", "dress", "bag", "cap"]; // dibujo de respaldo si no hay foto
+const SIZE_SETS = { top: ["XS", "S", "M", "L", "XL"], bottom: ["38", "40", "42", "44", "46"], one: ["Única"] };
+const MAX_IMG = 700 * 1024;
+const IMG_RE = /^p\/[0-9]+-[0-9a-f]{10}\.(webp|jpg|png)$/;
 const SESSION_DAYS = 30;
 const MAX_ATTEMPTS = 8;           // intentos por ventana
 const ATTEMPT_WINDOW_MIN = 15;
@@ -29,6 +35,8 @@ export default {
     const path = url.pathname;
     try {
       if (path.startsWith("/api/auth/")) return await auth(request, env, url, ctx);
+      if (path === "/api/shop" && request.method === "GET") return json(shopInfo(env));
+      if (path.startsWith("/img/") && request.method === "GET") return await image(env, path.slice(5));
       if (path === "/api/products" && request.method === "GET") return await products(env);
       if (path === "/api/checkout" && request.method === "POST") return await checkout(request, env, url);
       if (path === "/api/webhook" && request.method === "POST") return await webhook(request, env, ctx);
@@ -132,7 +140,7 @@ async function markPaid(env, s, ctx, origin) {
 async function products(env) {
   await releaseExpired(env);
   const { results: ps } = await env.DB.prepare(
-    "SELECT id, slug, name, category, kind, description, price_cents, compare_at_cents FROM products WHERE active = 1 ORDER BY id"
+    "SELECT id, slug, name, category, kind, description, price_cents, compare_at_cents, image_key FROM products WHERE active = 1 ORDER BY id"
   ).all();
   const { results: vs } = await env.DB.prepare(
     "SELECT id, product_id, color_name, color_hex, size, stock FROM variants WHERE product_id IN (SELECT id FROM products WHERE active = 1) ORDER BY id"
@@ -144,7 +152,7 @@ async function products(env) {
     });
   }
   return json({
-    products: ps.map((p) => ({ ...p, variants: byProduct[p.id] || [] })),
+    products: ps.map(({ image_key, ...p }) => ({ ...p, image: image_key ? `/img/${image_key}` : null, variants: byProduct[p.id] || [] })),
     shipping: RATES,
     maxQty: MAX_QTY,
   });
@@ -158,6 +166,7 @@ async function checkout(request, env, url) {
   let body;
   try { body = await request.json(); } catch { return json({ error: "Petición no válida." }, 400); }
 
+  if (body.terms !== true) return json({ error: "Acepta las condiciones de venta y la política de privacidad para continuar." }, 400);
   const quantities = new Map();
   const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
   for (const it of items) {
@@ -199,7 +208,7 @@ async function checkout(request, env, url) {
 
   // 2) Crear el pedido y reservar el stock en una sola transacción
   const created = await env.DB.prepare(
-    "INSERT INTO orders (status, total_cents, shipping_cents, user_id, fulfillment) VALUES ('pending', ?1, ?2, ?3, ?4)"
+    "INSERT INTO orders (status, total_cents, shipping_cents, user_id, fulfillment, terms_at) VALUES ('pending', ?1, ?2, ?3, ?4, datetime('now'))"
   ).bind(subtotal + shipping, shipping, user ? user.id : null, pickup ? "pickup" : "ship").run();
   const orderId = created.meta.last_row_id;
   try {
@@ -307,7 +316,12 @@ async function cancel(request, env) {
 async function admin(request, env, url, ctx) {
   const header = request.headers.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!env.ADMIN_TOKEN || !token || !safeEqual(token, env.ADMIN_TOKEN)) return json({ error: "No autorizado" }, 401);
+  const ip = request.headers.get("cf-connecting-ip") || "0.0.0.0";
+  if (await tooMany(env, [`adm:ip:${ip}`])) return TOO_MANY();
+  if (!env.ADMIN_TOKEN || !token || !safeEqual(token, env.ADMIN_TOKEN)) {
+    await hit(env, [`adm:ip:${ip}`]);
+    return json({ error: "No autorizado" }, 401);
+  }
 
   if (url.pathname === "/api/admin/summary" && request.method === "GET") {
     const { results: orders } = await env.DB.prepare(
@@ -342,6 +356,54 @@ async function admin(request, env, url, ctx) {
     // Solo avisamos al cliente la primera vez (corregir el seguimiento no reenvía el correo)
     if (first && o.email) ctx.waitUntil(mailFulfilled(env, o, next, carrier, tracking, env.SITE_URL || url.origin).catch((e) => console.error("mail", e && e.message)));
     return json({ ok: true, status: next, emailed: first && !!o.email });
+  }
+
+  if (url.pathname === "/api/admin/products" && request.method === "GET") {
+    const { results: ps } = await env.DB.prepare(
+      "SELECT id, slug, name, category, kind, size_kind, description, price_cents, compare_at_cents, active, image_key FROM products ORDER BY id"
+    ).all();
+    const { results: vs } = await env.DB.prepare("SELECT id, product_id, color_name, color_hex, size, stock FROM variants ORDER BY id").all();
+    return json({
+      products: ps.map(({ image_key, ...p }) => ({ ...p, image: image_key ? `/img/${image_key}` : null, variants: vs.filter((v) => v.product_id === p.id) })),
+      kinds: KINDS, sizeSets: SIZE_SETS,
+    });
+  }
+
+  if (url.pathname === "/api/admin/product" && request.method === "POST") {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "Petición no válida" }, 400); }
+    const r = await saveProduct(env, body);
+    return json(r.error ? { error: r.error } : r, r.error ? (r.status || 400) : 200);
+  }
+
+  if (url.pathname === "/api/admin/active" && request.method === "POST") {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "Petición no válida" }, 400); }
+    const id = Number(body.id);
+    if (!Number.isInteger(id) || id <= 0) return json({ error: "Datos no válidos" }, 400);
+    const r = await env.DB.prepare("UPDATE products SET active = ?1 WHERE id = ?2").bind(body.active ? 1 : 0, id).run();
+    return json({ ok: r.meta.changes > 0 });
+  }
+
+  if (url.pathname === "/api/admin/import" && request.method === "POST") {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "Petición no válida" }, 400); }
+    const r = await importRows(env, body.rows);
+    return json(r.error ? { error: r.error } : r, r.error ? 400 : 200);
+  }
+
+  if (url.pathname === "/api/admin/image" && request.method === "POST") return await uploadImage(request, env, url);
+
+  if (url.pathname === "/api/admin/image-delete" && request.method === "POST") {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "Petición no válida" }, 400); }
+    const id = Number(body.id);
+    if (!Number.isInteger(id) || id <= 0) return json({ error: "Datos no válidos" }, 400);
+    const p = await env.DB.prepare("SELECT image_key FROM products WHERE id = ?1").bind(id).first();
+    if (!p) return json({ error: "Producto no encontrado" }, 404);
+    await env.DB.prepare("UPDATE products SET image_key = NULL WHERE id = ?1").bind(id).run();
+    if (p.image_key && env.IMAGES) await env.IMAGES.delete(p.image_key);
+    return json({ ok: true });
   }
 
   if (url.pathname === "/api/admin/stock" && request.method === "POST") {
@@ -440,6 +502,7 @@ async function auth(request, env, url, ctx) {
     if (!EMAIL_RE.test(email)) return json({ error: "Escribe un correo válido." }, 400);
     if (!name) return json({ error: "Escribe tu nombre." }, 400);
     if (password.length < 8 || password.length > 128) return json({ error: "La contraseña debe tener entre 8 y 128 caracteres." }, 400);
+    if (body.terms !== true) return json({ error: "Debes aceptar la política de privacidad." }, 400);
     const keys = [`reg:ip:${ip}`];
     if (await tooMany(env, keys)) return TOO_MANY();
     await hit(env, keys);
@@ -449,7 +512,7 @@ async function auth(request, env, url, ctx) {
     const marketing = body.marketing === true ? 1 : 0; // casilla sin marcar por defecto (RGPD): solo si el cliente la marca
     const hash = await hashPassword(password, salt, iter);
     const r = await env.DB.prepare(
-      "INSERT INTO users (email, name, pass_hash, pass_salt, pass_iter, marketing, marketing_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?6 = 1 THEN datetime('now') END)"
+      "INSERT INTO users (email, name, pass_hash, pass_salt, pass_iter, marketing, marketing_at, terms_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?6 = 1 THEN datetime('now') END, datetime('now'))"
     ).bind(email, name, hash, salt, iter, marketing).run();
     const uid = r.meta.last_row_id;
     ctx.waitUntil(Promise.all([
@@ -614,23 +677,213 @@ function mailReset(env, email, name, link) {
 
 async function mailOrderPaid(env, sessionId, origin) {
   const o = await env.DB.prepare("SELECT id, email, name, total_cents, shipping_cents, fulfillment, shipping_address FROM orders WHERE stripe_session_id = ?1").bind(sessionId).first();
-  if (!o || !o.email) return;
+  if (!o) return;
   const { results: items } = await env.DB.prepare("SELECT name, qty, unit_cents FROM order_items WHERE order_id = ?1").bind(o.id).all();
-  let where = "<p style=\"font-size:14px\"><strong>Recogida en tienda.</strong> Te avisaremos por correo en cuanto tu pedido esté listo.</p>";
-  if (o.fulfillment !== "pickup") {
+  const pick = o.fulfillment === "pickup";
+  let addr = "";
+  if (!pick) {
     let a = null;
     try { a = o.shipping_address ? JSON.parse(o.shipping_address) : null; } catch { /* dirección ilegible */ }
-    const line = a ? [a.name, a.line1, a.line2, `${a.postal_code || ""} ${a.city || ""}`.trim(), a.country].filter(Boolean).map(escHtml).join("<br>") : "";
-    where = `<p style="font-size:14px"><strong>Envío a:</strong><br>${line}</p>`;
+    addr = a ? [a.name, a.line1, a.line2, `${a.postal_code || ""} ${a.city || ""}`.trim(), a.country].filter(Boolean).map(escHtml).join("<br>") : "";
   }
+  const where = pick
+    ? '<p style="font-size:14px"><strong>Recogida en tienda.</strong> Te avisaremos por correo en cuanto tu pedido esté listo.</p>'
+    : `<p style="font-size:14px"><strong>Envío a:</strong><br>${addr}</p>`;
   const rows = items.map((i) => `<tr><td style="padding:6px 0;font-size:14px">${i.qty} × ${escHtml(i.name)}</td><td style="padding:6px 0;font-size:14px;text-align:right">${eur(i.qty * i.unit_cents)}</td></tr>`).join("");
-  const inner = `<p style="font-size:15px">Hemos recibido tu pago. Este es el resumen del pedido <strong>nº ${o.id}</strong>:</p>
-<table style="width:100%;border-collapse:collapse;border-top:1px solid #e6e3dd">${rows}
+  const table = `<table style="width:100%;border-collapse:collapse;border-top:1px solid #e6e3dd">${rows}
 <tr><td style="padding:6px 0;font-size:14px;color:#6b6a66">Envío</td><td style="text-align:right;font-size:14px">${o.shipping_cents ? eur(o.shipping_cents) : "Gratis"}</td></tr>
-<tr><td style="padding:10px 0;font-weight:800;border-top:1px solid #e6e3dd">Total</td><td style="text-align:right;font-weight:800;border-top:1px solid #e6e3dd">${eur(o.total_cents)}</td></tr></table>${where}`;
-  await sendMail(env, o.email, o.name, `Pedido nº ${o.id} confirmado`, layout(env, "¡Gracias por tu compra!", inner, { text: "Ir a la tienda", url: origin }));
+<tr><td style="padding:10px 0;font-weight:800;border-top:1px solid #e6e3dd">Total</td><td style="text-align:right;font-weight:800;border-top:1px solid #e6e3dd">${eur(o.total_cents)}</td></tr></table>`;
+  if (o.email) {
+    await sendMail(env, o.email, o.name, `Pedido nº ${o.id} confirmado`,
+      layout(env, "¡Gracias por tu compra!", `<p style="font-size:15px">Hemos recibido tu pago. Este es el resumen del pedido <strong>nº ${o.id}</strong>:</p>${table}${where}`, { text: "Ir a la tienda", url: origin }));
+  }
+  // Aviso al dueño de la tienda
+  const owner = env.OWNER_EMAIL || env.MAIL_FROM;
+  if (owner) {
+    const who = `<p style="font-size:14px"><strong>Cliente:</strong> ${escHtml(o.name || "—")} · ${escHtml(o.email || "sin correo")}</p>`;
+    await sendMail(env, owner, storeName(env), `Nuevo pedido nº ${o.id} · ${eur(o.total_cents)}`,
+      layout(env, "Tienes un pedido nuevo", `${who}${table}${where}`, { text: "Abrir el panel", url: `${origin}/admin.html` }));
+  }
 }
 
+/* ================================================================== TIENDA: datos legales, fotos, productos */
+function shopInfo(env) {
+  return {
+    name: storeName(env),
+    legalName: env.SHOP_LEGAL_NAME || "",
+    nif: env.SHOP_NIF || "",
+    address: env.SHOP_ADDRESS || "",
+    email: env.SHOP_EMAIL || env.MAIL_FROM || "",
+    phone: env.SHOP_PHONE || "",
+    registry: env.SHOP_REGISTRY || "",
+    returnAddress: env.SHOP_RETURN_ADDRESS || env.SHOP_ADDRESS || "",
+  };
+}
+
+const slugify = (v) => String(v || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+
+// "19,90", "19.90", "1.234,50", "19,90 €" → céntimos (o null si no es válido)
+function parseEuros(v) {
+  let t = String(v == null ? "" : v).replace(/[€\s]/g, "");
+  if (!t) return null;
+  if (t.includes(",") && t.includes(".")) t = t.replace(/\./g, "").replace(",", ".");
+  else t = t.replace(",", ".");
+  const n = Number(t);
+  if (!Number.isFinite(n) || n <= 0 || n > 10000) return null;
+  return Math.round(n * 100);
+}
+
+async function image(env, key) {
+  if (!env.IMAGES || !IMG_RE.test(key)) return new Response("No encontrado", { status: 404 });
+  const obj = await env.IMAGES.get(key);
+  if (!obj) return new Response("No encontrado", { status: 404 });
+  const type = key.endsWith(".webp") ? "image/webp" : key.endsWith(".png") ? "image/png" : "image/jpeg";
+  // La clave cambia en cada subida, así que la foto puede cachearse un año
+  return new Response(obj.body, { headers: { "content-type": type, "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" } });
+}
+
+function sniffImage(b) {
+  if (b.length > 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "webp";
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "jpg";
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "png";
+  return null;
+}
+
+async function uploadImage(request, env, url) {
+  if (!env.IMAGES) return json({ error: "Falta configurar el almacén de fotos (R2) en el servidor." }, 501);
+  const id = Number(url.searchParams.get("product"));
+  if (!Number.isInteger(id) || id <= 0) return json({ error: "Producto no válido." }, 400);
+  const p = await env.DB.prepare("SELECT id, image_key FROM products WHERE id = ?1").bind(id).first();
+  if (!p) return json({ error: "Producto no encontrado." }, 404);
+  const buf = new Uint8Array(await request.arrayBuffer());
+  if (!buf.length || buf.length > MAX_IMG) return json({ error: "La foto es demasiado grande (máximo 700 KB). Se reduce sola al subirla desde el panel." }, 413);
+  const ext = sniffImage(buf);
+  if (!ext) return json({ error: "Formato de foto no válido (usa JPG, PNG o WebP)." }, 415);
+  const key = `p/${id}-${randomHex(5)}.${ext}`;
+  await env.IMAGES.put(key, buf, { httpMetadata: { contentType: ext === "webp" ? "image/webp" : ext === "png" ? "image/png" : "image/jpeg" } });
+  await env.DB.prepare("UPDATE products SET image_key = ?1 WHERE id = ?2").bind(key, id).run();
+  if (p.image_key) await env.IMAGES.delete(p.image_key);
+  return json({ ok: true, image: `/img/${key}` });
+}
+
+function cleanProduct(b) {
+  const name = String(b.name || "").trim().slice(0, 120);
+  const category = String(b.category || "").trim().slice(0, 40);
+  const description = String(b.description || "").trim().slice(0, 600);
+  const price = Number(b.price_cents);
+  const compare = b.compare_at_cents == null || b.compare_at_cents === "" ? null : Number(b.compare_at_cents);
+  if (!name || !category) return { error: "Falta el nombre o la categoría." };
+  if (!Number.isInteger(price) || price < 1 || price > 1000000) return { error: "El precio no es válido." };
+  if (compare !== null && (!Number.isInteger(compare) || compare <= price || compare > 1000000)) return { error: "El precio anterior debe ser mayor que el precio actual." };
+  return { v: { name, category, description, price, compare, kind: KINDS.includes(b.kind) ? b.kind : "tee", size_kind: SIZE_SETS[b.size_kind] ? b.size_kind : "top" } };
+}
+
+function cleanVariants(list) {
+  if (!Array.isArray(list) || list.length > 120) return { error: "Lista de variantes no válida." };
+  const seen = new Set(), out = [];
+  for (const x of list) {
+    const color_name = String(x && x.color_name || "").trim().slice(0, 30);
+    const color_hex = String(x && x.color_hex || "");
+    const size = String(x && x.size || "").trim().slice(0, 12);
+    const stock = Number(x && x.stock), id = x && x.id ? Number(x.id) : 0;
+    if (!color_name || !size) return { error: "Cada variante necesita color y talla." };
+    if (!/^#[0-9a-fA-F]{6}$/.test(color_hex)) return { error: `El color «${color_name}» no es válido.` };
+    if (!Number.isInteger(stock) || stock < 0 || stock > 10000) return { error: "El stock debe estar entre 0 y 10000." };
+    const k = `${color_name.toLowerCase()}|${size.toLowerCase()}`;
+    if (seen.has(k)) return { error: `Variante repetida: ${color_name} · ${size}.` };
+    seen.add(k);
+    out.push({ id: Number.isInteger(id) && id > 0 ? id : 0, color_name, color_hex, size, stock });
+  }
+  return { list: out };
+}
+
+async function saveProduct(env, b) {
+  const c = cleanProduct(b || {});
+  if (c.error) return c;
+  const vr = cleanVariants((b || {}).variants);
+  if (vr.error) return vr;
+  const v = c.v;
+  let id = Number(b.id) || 0, slug;
+  if (id) {
+    const ex = await env.DB.prepare("SELECT id, slug FROM products WHERE id = ?1").bind(id).first();
+    if (!ex) return { error: "Producto no encontrado.", status: 404 };
+    slug = ex.slug;
+    await env.DB.prepare("UPDATE products SET name=?1, category=?2, kind=?3, size_kind=?4, description=?5, price_cents=?6, compare_at_cents=?7 WHERE id=?8")
+      .bind(v.name, v.category, v.kind, v.size_kind, v.description, v.price, v.compare, id).run();
+  } else {
+    const base = slugify(v.name) || "producto";
+    slug = base;
+    for (let n = 2; await env.DB.prepare("SELECT 1 AS x FROM products WHERE slug = ?1").bind(slug).first(); n++) slug = `${base}-${n}`;
+    const r = await env.DB.prepare("INSERT INTO products (slug, name, category, kind, size_kind, description, price_cents, compare_at_cents) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)")
+      .bind(slug, v.name, v.category, v.kind, v.size_kind, v.description, v.price, v.compare).run();
+    id = r.meta.last_row_id;
+  }
+  if (typeof b.active === "boolean") await env.DB.prepare("UPDATE products SET active = ?1 WHERE id = ?2").bind(b.active ? 1 : 0, id).run();
+
+  const { results: cur } = await env.DB.prepare("SELECT id FROM variants WHERE product_id = ?1").bind(id).all();
+  const own = new Set(cur.map((x) => x.id));
+  for (const x of vr.list) if (x.id && !own.has(x.id)) return { error: "Variante no válida." };
+  const keep = new Set(vr.list.filter((x) => x.id).map((x) => x.id));
+  const stmts = [];
+  for (const x of vr.list) {
+    stmts.push(x.id
+      ? env.DB.prepare("UPDATE variants SET color_name=?1, color_hex=?2, size=?3, stock=?4 WHERE id=?5 AND product_id=?6").bind(x.color_name, x.color_hex, x.size, x.stock, x.id, id)
+      : env.DB.prepare("INSERT INTO variants (product_id, sku, color_name, color_hex, size, stock) VALUES (?1,?2,?3,?4,?5,?6)").bind(id, `${slug}-${randomHex(4)}`, x.color_name, x.color_hex, x.size, x.stock));
+  }
+  for (const old of cur) {
+    if (keep.has(old.id)) continue;
+    // Si ya hay pedidos con esa variante no se puede borrar: se deja sin stock
+    stmts.push(env.DB.prepare("DELETE FROM variants WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM order_items WHERE variant_id = ?1)").bind(old.id));
+    stmts.push(env.DB.prepare("UPDATE variants SET stock = 0 WHERE id = ?1").bind(old.id));
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return { ok: true, id };
+}
+
+// Importación desde CSV/Excel: una fila por variante (producto + color + talla). Se puede repetir sin duplicar.
+async function importRows(env, rows) {
+  if (!Array.isArray(rows) || !rows.length) return { error: "El archivo no tiene filas." };
+  if (rows.length > 400) return { error: "Máximo 400 filas por importación." };
+  const errors = [], products = new Map(), variants = [];
+  rows.forEach((r, i) => {
+    const line = i + 2, name = String(r.name || "").trim().slice(0, 120), slug = slugify(name);
+    if (!slug) { errors.push({ line, msg: "Falta el nombre del producto." }); return; }
+    const price = parseEuros(r.price);
+    if (price === null) { errors.push({ line, msg: `Precio no válido en «${name}».` }); return; }
+    let compare = r.compare_at ? parseEuros(r.compare_at) : null;
+    if (compare !== null && compare <= price) compare = null;
+    const size = String(r.size || "Única").trim().slice(0, 12) || "Única";
+    const color = String(r.color || "Único").trim().slice(0, 30) || "Único";
+    const hex = /^#[0-9a-fA-F]{6}$/.test(String(r.hex || "").trim()) ? String(r.hex).trim() : "#C8C4BC";
+    const stock = Math.max(0, Math.min(10000, parseInt(r.stock, 10) || 0));
+    if (!products.has(slug)) {
+      products.set(slug, {
+        slug, name, price, compare,
+        category: String(r.category || "General").trim().slice(0, 40) || "General",
+        description: String(r.description || "").trim().slice(0, 600),
+        kind: KINDS.includes(String(r.kind || "").trim()) ? String(r.kind).trim() : "tee",
+        size_kind: /^\d+$/.test(size) ? "bottom" : size.toLowerCase() === "única" || size.toLowerCase() === "unica" ? "one" : "top",
+      });
+    }
+    variants.push({ slug, sku: `${slug}-${slugify(color)}-${slugify(size)}`, color, hex, size, stock });
+  });
+  if (errors.length) return { error: `Hay ${errors.length} fila(s) con errores. Primera: línea ${errors[0].line}, ${errors[0].msg}`, errors };
+  const stmts = [];
+  for (const p of products.values()) {
+    stmts.push(env.DB.prepare(
+      `INSERT INTO products (slug, name, category, kind, size_kind, description, price_cents, compare_at_cents) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+       ON CONFLICT(slug) DO UPDATE SET name=excluded.name, category=excluded.category, kind=excluded.kind, description=excluded.description, price_cents=excluded.price_cents, compare_at_cents=excluded.compare_at_cents, active=1`
+    ).bind(p.slug, p.name, p.category, p.kind, p.size_kind, p.description, p.price, p.compare));
+  }
+  for (const x of variants) {
+    stmts.push(env.DB.prepare(
+      `INSERT INTO variants (product_id, sku, color_name, color_hex, size, stock) VALUES ((SELECT id FROM products WHERE slug = ?1), ?2, ?3, ?4, ?5, ?6)
+       ON CONFLICT(sku) DO UPDATE SET color_name=excluded.color_name, color_hex=excluded.color_hex, size=excluded.size, stock=excluded.stock`
+    ).bind(x.slug, x.sku, x.color, x.hex, x.size, x.stock));
+  }
+  for (let i = 0; i < stmts.length; i += 80) await env.DB.batch(stmts.slice(i, i + 80));
+  return { ok: true, products: products.size, variants: variants.length };
+}
 function mailFulfilled(env, o, state, carrier, tracking, origin) {
   if (state === "ready") {
     return sendMail(env, o.email, o.name, `Tu pedido nº ${o.id} está listo para recoger`,

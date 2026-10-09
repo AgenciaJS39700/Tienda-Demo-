@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Información legal</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23141414'/%3E%3C/svg%3E">
+<style>
+:root{--ink:#141414;--clay:#b8613a;--line:#e6e3dd;--sand:#f1eee8;--paper:#faf9f7;--mute:#6b6a66}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+header{border-bottom:1px solid var(--line);background:#fff}
+.w{max-width:760px;margin:0 auto;padding:0 20px}
+header .w{display:flex;align-items:center;justify-content:space-between;min-height:60px}
+.brand{font:800 1.1rem Georgia,serif;letter-spacing:.2em;text-transform:uppercase;text-decoration:none;color:var(--ink)}
+.back{font-size:.9rem;font-weight:700;text-decoration:underline;text-underline-offset:3px;color:var(--ink)}
+nav.tabs{display:flex;gap:8px;overflow-x:auto;padding:16px 0 4px;position:sticky;top:0;background:var(--paper);z-index:2}
+nav.tabs a{flex:none;min-height:44px;display:inline-flex;align-items:center;padding:0 16px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:.85rem;font-weight:700;text-decoration:none;color:var(--ink)}
+nav.tabs a:hover,nav.tabs a:focus-visible{border-color:var(--ink);outline:none}
+nav.tabs a.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+h1{font:800 clamp(1.8rem,5vw,2.4rem)/1.15 Georgia,serif;margin:28px 0 6px}
+h2{font:800 1.5rem/1.2 Georgia,serif;margin:0 0 4px;scroll-margin-top:80px}
+h3{font-size:1rem;margin:22px 0 4px}
+section{padding:30px 0;border-top:1px solid var(--line)}
+section:first-of-type{border-top:0}
+p,li{margin:8px 0}
+ul,ol{padding-left:22px}
+.upd{font-size:.8rem;color:var(--mute)}
+.note{background:#fff7e6;border:1px solid #f1d49b;color:#6b4a00;border-radius:14px;padding:14px 16px;font-size:.9rem;margin:18px 0}
+.pend{background:#ffe8a3;border-radius:4px;padding:0 4px;font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:.9rem;margin:10px 0}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--sand)}
+.form{background:#fff;border:1px dashed var(--mute);border-radius:14px;padding:16px;font-size:.9rem}
+footer{border-top:1px solid var(--line);background:var(--sand);margin-top:30px;padding:24px 0;text-align:center;font-size:.8rem;color:var(--mute)}
+a{color:inherit}
+</style>
+</head>
+<body>
+<header><div class="w"><a class="brand" href="/" id="brand">Tienda</a><a class="back" href="/">Volver a la tienda</a></div></header>
+<main class="w">
+<h1>Información legal</h1>
+<p class="upd">Última actualización: <span id="fecha"></span></p>
+<div id="aviso-plantilla" class="note" hidden><strong>Plantilla sin completar.</strong> Faltan datos del titular (marcados en amarillo). Se rellenan en las variables <code>SHOP_*</code> del Worker y estos textos deben ser revisados por un asesor legal antes de publicar la tienda.</div>
+<nav class="tabs" aria-label="Secciones legales">
+<a href="#aviso-legal">Aviso legal</a><a href="#privacidad">Privacidad</a><a href="#cookies">Cookies</a><a href="#condiciones">Condiciones de venta</a><a href="#desistimiento">Desistimiento</a>
+</nav>
+
+<section id="aviso-legal">
+<h2>Aviso legal</h2>
+<p>En cumplimiento de la Ley 34/2002 de Servicios de la Sociedad de la Información y de Comercio Electrónico (LSSI-CE), se informa de que este sitio web es titularidad de:</p>
+<ul>
+<li><strong>Titular:</strong> <span data-f="legalName"></span></li>
+<li><strong>NIF/CIF:</strong> <span data-f="nif"></span></li>
+<li><strong>Domicilio:</strong> <span data-f="address"></span></li>
+<li><strong>Correo electrónico:</strong> <span data-f="email"></span></li>
+<li><strong>Teléfono:</strong> <span data-f="phone" data-opt="1"></span></li>
+<li data-reg hidden><strong>Datos registrales:</strong> <span data-f="registry" data-opt="1"></span></li>
+</ul>
+<h3>Propiedad intelectual</h3>
+<p>Los textos, imágenes, logotipos y diseños de este sitio pertenecen a su titular o se usan con licencia. No pueden copiarse ni reutilizarse sin autorización.</p>
+<h3>Responsabilidad</h3>
+<p>El titular procura que la información sea exacta y esté actualizada, pero no garantiza la ausencia de errores ni la disponibilidad ininterrumpida del servicio. Los enlaces a sitios de terceros se ofrecen como cortesía y no implican responsabilidad sobre su contenido.</p>
+<h3>Legislación aplicable</h3>
+<p>Este sitio se rige por la legislación española. Si eres consumidor, podrás acudir a los tribunales de tu domicilio.</p>
+</section>
+
+<section id="privacidad">
+<h2>Política de privacidad</h2>
+<p>Te explicamos cómo tratamos tus datos personales conforme al Reglamento (UE) 2016/679 (RGPD) y a la Ley Orgánica 3/2018 (LOPDGDD).</p>
+<h3>Responsable del tratamiento</h3>
+<p><span data-f="legalName"></span> (NIF <span data-f="nif"></span>), con domicilio en <span data-f="address"></span>. Contacto: <span data-f="email"></span>.</p>
+<h3>Qué datos tratamos y para qué</h3>
+<table>
+<tr><th>Finalidad</th><th>Datos</th><th>Base jurídica</th></tr>
+<tr><td>Crear y gestionar tu cuenta</td><td>Nombre, correo, contraseña (guardada cifrada, nunca en claro)</td><td>Ejecución de un contrato / medidas precontractuales</td></tr>
+<tr><td>Gestionar tus pedidos: cobro, envío, recogida, facturación y atención</td><td>Nombre, correo, dirección de envío, productos comprados e importe</td><td>Ejecución del contrato y obligaciones legales (fiscales y contables)</td></tr>
+<tr><td>Enviarte novedades y ofertas por correo</td><td>Nombre y correo</td><td>Tu consentimiento, que puedes retirar cuando quieras</td></tr>
+<tr><td>Seguridad y prevención del fraude (límite de intentos de acceso)</td><td>Dirección IP, de forma temporal</td><td>Interés legítimo</td></tr>
+</table>
+<p>No tratamos tus datos de tarjeta: el pago se realiza en la página segura de Stripe y nosotros solo recibimos la confirmación del cobro.</p>
+<h3>Destinatarios</h3>
+<p>Para prestarte el servicio compartimos datos con proveedores que actúan como encargados del tratamiento: <strong>Stripe</strong> (pagos), <strong>Cloudflare</strong> (alojamiento y base de datos), <strong>Brevo</strong> (envío de correos) y las empresas de transporte que entregan tus pedidos. No cedemos tus datos a otros terceros salvo obligación legal.</p>
+<h3>Transferencias internacionales</h3>
+<p>Algunos proveedores pueden tratar datos fuera del Espacio Económico Europeo. En ese caso se hace con las garantías del RGPD (cláusulas contractuales tipo o decisiones de adecuación, como el Marco de Privacidad de Datos UE-EE. UU.).</p>
+<h3>Plazo de conservación</h3>
+<p>Conservamos tu cuenta mientras no la elimines. Los datos de pedidos se guardan durante los plazos legales (con carácter general, 6 años por la normativa mercantil y fiscal). Los datos para novedades, hasta que retires tu consentimiento.</p>
+<h3>Tus derechos</h3>
+<p>Puedes ejercer los derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a <span data-f="email"></span>. Desde tu cuenta puedes darte de baja de las novedades o eliminar tu cuenta cuando quieras. Si consideras que no hemos tratado tus datos correctamente, puedes reclamar ante la Agencia Española de Protección de Datos (<a href="https://www.aepd.es" rel="noopener" target="_blank">www.aepd.es</a>).</p>
+</section>
+
+<section id="cookies">
+<h2>Política de cookies</h2>
+<p>Este sitio solo utiliza almacenamiento <strong>técnico y necesario</strong>, que no requiere consentimiento:</p>
+<table>
+<tr><th>Nombre</th><th>Para qué sirve</th><th>Duración</th></tr>
+<tr><td><code>sid</code> (cookie)</td><td>Mantener tu sesión iniciada</td><td>30 días o hasta cerrar sesión</td></tr>
+<tr><td><code>hz_cart</code>, <code>hz_ship</code> (almacenamiento local)</td><td>Recordar tu carrito y tu método de entrega</td><td>Hasta que lo borres</td></tr>
+</table>
+<p>No usamos cookies de analítica, publicidad ni seguimiento. Al pagar, la página de Stripe puede usar sus propias cookies técnicas y de prevención del fraude, según su política.</p>
+</section>
+
+<section id="condiciones">
+<h2>Condiciones de venta</h2>
+<h3>1. Quién vende</h3>
+<p><span data-f="legalName"></span> (NIF <span data-f="nif"></span>), <span data-f="address"></span>, <span data-f="email"></span>.</p>
+<h3>2. Productos y precios</h3>
+<p>Los precios se muestran en euros con el IVA incluido. Los gastos de envío se indican en el carrito antes de pagar. La disponibilidad se actualiza en tiempo real; al iniciar el pago reservamos tu pedido durante 30 minutos.</p>
+<h3>3. Proceso de compra y contrato</h3>
+<p>Eliges productos, método de entrega y pagas. El contrato se perfecciona cuando recibes el correo de confirmación del pedido. Puedes crear una cuenta o comprar sin ella.</p>
+<h3>4. Pago</h3>
+<p>El pago se hace con tarjeta a través de Stripe, con cifrado y autenticación reforzada cuando el banco lo exige. No almacenamos datos de tu tarjeta.</p>
+<h3>5. Envío y recogida</h3>
+<p>Enviamos a los países indicados en el carrito, con las tarifas allí mostradas. También puedes elegir recogida en tienda sin coste: te avisaremos por correo cuando esté listo. Salvo que se indique otra fecha, entregaremos el pedido como máximo en 30 días desde la confirmación. Te enviaremos el seguimiento por correo cuando salga el pedido.</p>
+<h3>6. Garantía legal</h3>
+<p>Los productos nuevos tienen una garantía legal de 3 años desde la entrega frente a faltas de conformidad (Real Decreto Legislativo 1/2007). Si recibes un producto defectuoso, escríbenos a <span data-f="email"></span> y lo resolveremos mediante reparación, sustitución, rebaja del precio o resolución del contrato, según proceda.</p>
+<h3>7. Reclamaciones</h3>
+<p>Atenderemos cualquier queja en <span data-f="email"></span>. Como consumidor también puedes acudir a los servicios de consumo de tu comunidad autónoma.</p>
+</section>
+
+<section id="desistimiento">
+<h2>Desistimiento y devoluciones</h2>
+<p>Tienes derecho a desistir de tu compra, sin indicar motivo, en un plazo de <strong>14 días naturales</strong> desde que recibes el pedido (o desde que lo recoges en tienda).</p>
+<h3>Cómo desistir</h3>
+<ol>
+<li>Comunícanoslo antes de que acabe el plazo por correo a <span data-f="email"></span>, indicando tu nombre, el número de pedido y los artículos. Puedes usar el formulario de abajo.</li>
+<li>Envía los artículos a: <span data-f="returnAddress"></span>, sin demora y como máximo en 14 días desde tu comunicación.</li>
+</ol>
+<h3>Reembolso</h3>
+<p>Te devolveremos el importe de los artículos y los gastos de envío estándar iniciales en un máximo de 14 días desde que nos comunicas el desistimiento. Podemos esperar a recibir la devolución o a que acredites su envío. Usaremos el mismo medio de pago que empleaste en la compra.</p>
+<h3>Costes y estado de los artículos</h3>
+<p>Los costes directos de devolver los artículos corren a cargo del cliente. Los artículos deben devolverse en buen estado, sin usar y con sus etiquetas; respondes de la disminución de valor derivada de una manipulación distinta de la necesaria para comprobar su naturaleza y funcionamiento.</p>
+<h3>Excepciones</h3>
+<p>No hay derecho de desistimiento en productos confeccionados conforme a tus especificaciones o claramente personalizados, ni en productos precintados por razones de higiene que hayan sido desprecintados tras la entrega (artículo 103 del RDL 1/2007).</p>
+<h3>Modelo de formulario de desistimiento</h3>
+<div class="form">
+<p>A la atención de <span data-f="legalName"></span>, <span data-f="address"></span>, <span data-f="email"></span>:</p>
+<p>Por la presente le comunico que desisto de mi contrato de venta del siguiente bien: ____________ (número de pedido: ______).<br>Pedido el: ______ / recibido el: ______<br>Nombre del consumidor: ____________<br>Dirección del consumidor: ____________<br>Fecha: ______</p>
+</div>
+</section>
+</main>
+<footer><div class="w">Estos textos son una plantilla general y deben ser revisados por un profesional antes de usarse en una tienda real.</div></footer>
+<script>
+(function () {
+"use strict";
+var d = new Date();
+document.getElementById("fecha").textContent = d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+var nodes = [].slice.call(document.querySelectorAll("[data-f]"));
+function paint(info) {
+var falta = false;
+nodes.forEach(function (n) {
+var v = info[n.dataset.f];
+if (v) { n.textContent = v; return; }
+if (n.dataset.opt) { var li = n.closest("li"); if (li) { li.hidden = true; } return; }
+n.textContent = "[pendiente de completar]"; n.className = "pend"; falta = true;
+});
+if (info.registry) { var r = document.querySelector("[data-reg]"); if (r) { r.hidden = false; } }
+document.getElementById("aviso-plantilla").hidden = !falta;
+if (info.name) { document.getElementById("brand").textContent = info.name; document.title = "Información legal · " + info.name; }
+}
+fetch("/api/shop").then(function (r) { return r.json(); }).then(paint).catch(function () { paint({}); });
+var tabs = [].slice.call(document.querySelectorAll("nav.tabs a"));
+function mark() { var h = location.hash || "#aviso-legal"; tabs.forEach(function (a) { a.classList.toggle("on", a.getAttribute("href") === h); }); }
+window.addEventListener("hashchange", mark); mark();
+})();
+</script>
+</body>
+</html>

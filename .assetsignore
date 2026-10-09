@@ -6,3 +6,5 @@ assetsignore.txt
 README.md
 migracion-001-cuentas.sql
 LEEME.md
+migracion-002-productos-legal.sql
+NUEVO-CLIENTE.md

@@ -34,6 +34,8 @@
 .ac h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.12em;margin:20px 0 0;color:#6b6a66}
 #ship-sel{display:block;width:100%;min-height:46px;margin-top:4px;padding:0 14px;border:1px solid #e6e3dd;border-radius:999px;background:#fff;font-size:.9rem;font-weight:600}
 #ship-sel:focus{outline:none;border-color:#b8613a;box-shadow:0 0 0 3px rgba(184,97,58,.25)}
+.tx{display:flex;gap:10px;align-items:flex-start;font-size:.78rem;line-height:1.4;margin-top:12px;color:#3b3a37}.tx input{width:20px;height:20px;flex:none;accent-color:#b8613a;margin-top:1px}.tx a{text-decoration:underline;text-underline-offset:2px;font-weight:700}
+.lg-nav{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 18px;margin-top:16px;font-size:.78rem;font-weight:700}.lg-nav a{text-decoration:underline;text-underline-offset:3px}.lg-nav a:hover{color:#b8613a}
 </style>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
@@ -97,6 +99,7 @@ Pagos de prueba: tarjeta <strong class="font-mono">4242 4242 4242 4242</strong>,
 <div class="mx-auto max-w-6xl px-4 text-center sm:px-6 lg:px-8">
 <p class="font-serif text-lg font-extrabold uppercase tracking-[0.22em]">Horizonte</p>
 <p class="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-mute">Tienda de demostración creada para mostrar catálogo, inventario, base de datos y pagos con Stripe en modo prueba. Los productos, precios y datos son ficticios.</p>
+<nav class="lg-nav" aria-label="Información legal"><a href="/legal.html#aviso-legal">Aviso legal</a><a href="/legal.html#privacidad">Privacidad</a><a href="/legal.html#cookies">Cookies</a><a href="/legal.html#condiciones">Condiciones de venta</a><a href="/legal.html#desistimiento">Desistimiento y devoluciones</a></nav>
 <p class="mt-4 text-xs text-mute">&copy; <span id="anio"></span> Demo · Hecho con Cloudflare Workers, D1 y Stripe</p>
 </div>
 </footer>
@@ -115,7 +118,7 @@ Pagos de prueba: tarjeta <strong class="font-mono">4242 4242 4242 4242</strong>,
 <script>
 (function () {
 "use strict";
-var state = { products: [], shipping: { ES: { label: "España", cents: 495, freeFrom: 6000 } }, ship: "ES", me: null, orders: [], maxQty: 10, cat: "Todo", sort: "destacados", cart: [], sel: null, loading: false };
+var state = { products: [], shipping: { ES: { label: "España", cents: 495, freeFrom: 6000 } }, ship: "ES", terms: false, me: null, orders: [], maxQty: 10, cat: "Todo", sort: "destacados", cart: [], sel: null, loading: false };
 var vmap = {};
 var eur = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 function $(id) { return document.getElementById(id); }
@@ -126,6 +129,10 @@ function mix(hex, to, t) {
 var a = hex.replace("#", ""), r = parseInt(a.slice(0, 2), 16), g = parseInt(a.slice(2, 4), 16), b = parseInt(a.slice(4, 6), 16), c = to === "w" ? 255 : 0;
 function f(n) { return Math.round(n + (c - n) * t).toString(16).padStart(2, "0"); }
 return "#" + f(r) + f(g) + f(b);
+}
+function pic(p, hex, fill) {
+if (p.image) { return '<img src="' + esc(p.image) + '" alt="' + esc(p.name) + '" loading="lazy" decoding="async" style="' + (fill ? "position:absolute;inset:0;" : "") + 'width:100%;height:100%;object-fit:cover;border-radius:inherit">'; }
+return ilu(p.kind, hex);
 }
 function ilu(kind, hex) {
 var d = mix(hex, "k", 0.24), l = mix(hex, "w", 0.22), sh = "rgba(0,0,0,.09)", s = "";
@@ -194,7 +201,7 @@ foot.innerHTML = ""; return;
 var subtotal = 0;
 body.innerHTML = '<ul class="divide-y divide-line">' + state.cart.map(function (i) {
 var m = vmap[i.v], p = m.p, v = m.v, line = i.q * p.price_cents; subtotal += line;
-return '<li class="flex gap-3 py-4"><div class="h-24 w-20 flex-none overflow-hidden rounded-xl bg-sand p-1">' + ilu(p.kind, v.hex) + '</div>' +
+return '<li class="flex gap-3 py-4"><div class="h-24 w-20 flex-none overflow-hidden rounded-xl bg-sand p-1">' + pic(p, v.hex) + '</div>' +
 '<div class="min-w-0 flex-1"><p class="truncate text-sm font-bold">' + esc(p.name) + '</p><p class="text-xs text-mute">' + esc(v.color) + ' · Talla ' + esc(v.size) + '</p>' +
 '<div class="mt-2 flex items-center justify-between"><div class="flex items-center rounded-full border border-line"><button type="button" data-minus="' + v.id + '" class="flex h-9 w-9 items-center justify-center text-lg font-bold" aria-label="Quitar una unidad">−</button><span class="w-6 text-center text-sm font-bold" aria-live="polite">' + i.q + '</span><button type="button" data-plus="' + v.id + '" class="flex h-9 w-9 items-center justify-center text-lg font-bold disabled:opacity-30" aria-label="Añadir una unidad"' + (i.q >= Math.min(v.stock, state.maxQty) ? " disabled" : "") + '>+</button></div>' +
 '<p class="text-sm font-extrabold">' + fmt(line) + '</p></div>' +
@@ -208,7 +215,8 @@ foot.innerHTML = '<div class="mb-3"><label for="ship-sel" class="text-xs font-bo
 '<dl class="space-y-1 text-sm"><div class="flex justify-between"><dt class="text-mute">Subtotal</dt><dd class="font-semibold">' + fmt(subtotal) + '</dd></div><div class="flex justify-between"><dt class="text-mute">' + (rate ? "Envío" : "Recogida") + '</dt><dd class="font-semibold">' + (ship === 0 ? "Gratis" : fmt(ship)) + '</dd></div>' +
 '<div class="flex justify-between border-t border-line pt-2 text-base"><dt class="font-bold">Total (IVA incluido)</dt><dd class="font-extrabold">' + fmt(subtotal + ship) + '</dd></div></dl>' +
 '<p id="cart-error" class="mt-3 hidden rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-800" role="alert"></p>' +
-'<button id="btn-pay" type="button" class="mt-3 inline-flex min-h-[54px] w-full items-center justify-center gap-2 rounded-full bg-ink px-6 text-base font-extrabold text-white transition hover:bg-clay focus:outline-none focus-visible:ring-4 focus-visible:ring-clay/40 disabled:opacity-60"><svg class="ic h-5 w-5" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg> Pagar con tarjeta</button>' +
+'<label class="tx"><input type="checkbox" id="cart-terms"' + (state.terms ? " checked" : "") + '><span>He leído y acepto las <a href="/legal.html#condiciones" target="_blank" rel="noopener">condiciones de venta</a> y la <a href="/legal.html#privacidad" target="_blank" rel="noopener">política de privacidad</a>.</span></label>' +
+'<button id="btn-pay" type="button"' + (state.terms ? "" : " disabled") + ' class="mt-3 inline-flex min-h-[54px] w-full items-center justify-center gap-2 rounded-full bg-ink px-6 text-base font-extrabold text-white transition hover:bg-clay focus:outline-none focus-visible:ring-4 focus-visible:ring-clay/40 disabled:opacity-60"><svg class="ic h-5 w-5" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg> Pagar con tarjeta</button>' +
 '<p class="mt-2 text-center text-xs text-mute">Serás redirigido a la página segura de Stripe (modo prueba).</p>';
 }
 $("cart-body").addEventListener("click", function (e) {
@@ -220,15 +228,16 @@ if (m) { it.q--; } if (p) { it.q++; } if (r || it.q <= 0) { state.cart = state.c
 syncCart(); renderCart();
 });
 $("cart-foot").addEventListener("change", function (e) {
+if (e.target.id === "cart-terms") { state.terms = e.target.checked; var pb = $("btn-pay"); if (pb) { pb.disabled = !state.terms; } return; }
 if (e.target.id !== "ship-sel") { return; }
 state.ship = e.target.value; try { localStorage.setItem("hz_ship", state.ship); } catch (x) { /* sin almacenamiento */ }
 renderCart(); var n = $("ship-sel"); if (n) { n.focus(); }
 });
 $("cart-foot").addEventListener("click", function (e) {
-if (!e.target.closest("#btn-pay")) { return; }
+if (!e.target.closest("#btn-pay") || !state.terms) { return; }
 var b = $("btn-pay"), err = $("cart-error");
 b.disabled = true; b.textContent = "Redirigiendo a Stripe…"; err.classList.add("hidden");
-fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ship: state.ship, items: state.cart.map(function (i) { return { variantId: i.v, qty: i.q }; }) }) })
+fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ship: state.ship, terms: state.terms, items: state.cart.map(function (i) { return { variantId: i.v, qty: i.q }; }) }) })
 .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
 .then(function (res) {
 if (res.ok && res.d.url) { window.location.href = res.d.url; return; }
@@ -257,7 +266,7 @@ if (ts === 0) { badge = '<span class="absolute left-3 top-3 rounded-full bg-ink 
 else if (p.compare_at_cents) { badge = '<span class="absolute left-3 top-3 rounded-full bg-clay px-2.5 py-1 text-[11px] font-extrabold text-white">-' + Math.round((1 - p.price_cents / p.compare_at_cents) * 100) + ' %</span>'; }
 else if (ts <= 12) { badge = '<span class="absolute left-3 top-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-clay shadow">Últimas unidades</span>'; }
 return '<article class="card" style="animation-delay:' + (i * 45) + 'ms"><button type="button" data-open="' + p.id + '" class="group block w-full text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-clay/40 rounded-2xl">' +
-'<div class="relative aspect-[4/5] overflow-hidden rounded-2xl bg-sand p-4' + (ts === 0 ? " opacity-60" : "") + '">' + ilu(p.kind, cols[0].hex) + badge + '</div>' +
+'<div class="relative aspect-[4/5] overflow-hidden rounded-2xl bg-sand' + (p.image ? "" : " p-4") + (ts === 0 ? " opacity-60" : "") + '">' + pic(p, cols[0].hex, true) + badge + '</div>' +
 '<div class="px-1 pt-3"><h3 class="text-sm font-bold leading-snug">' + esc(p.name) + '</h3>' +
 '<p class="mt-1 text-sm"><span class="font-extrabold">' + fmt(p.price_cents) + '</span>' + (p.compare_at_cents ? ' <span class="text-mute line-through">' + fmt(p.compare_at_cents) + '</span>' : "") + '</p>' +
 '<div class="mt-2 flex items-center gap-1.5" aria-label="Colores disponibles">' + cols.slice(0, 5).map(function (c) { return '<span class="h-4 w-4 rounded-full border border-black/15" style="background:' + c.hex + '" title="' + esc(c.name) + '"></span>'; }).join("") + (cols.length > 5 ? '<span class="text-xs text-mute">+' + (cols.length - 5) + "</span>" : "") + "</div></div></button></article>";
@@ -297,7 +306,7 @@ if (s.size && (!chosen || chosen.stock === 0)) { s.size = null; chosen = null; }
 var cap = chosen ? Math.min(chosen.stock, state.maxQty) : 1; s.qty = Math.max(1, Math.min(s.qty, cap));
 var stockMsg = !chosen ? "Elige una talla para ver la disponibilidad" : (chosen.stock <= 5 ? "¡Solo quedan " + chosen.stock + (chosen.stock === 1 ? " unidad!" : " unidades!") : "En stock");
 $("dlg-prod").innerHTML = '<div class="grid max-h-[calc(100vh-1.5rem)] overflow-y-auto md:grid-cols-2">' +
-'<div class="relative bg-sand p-6 sm:p-10"><div class="mx-auto aspect-[4/5] w-full max-w-sm">' + ilu(p.kind, cur.hex) + '</div></div>' +
+'<div class="relative bg-sand p-6 sm:p-10"><div class="mx-auto aspect-[4/5] w-full max-w-sm" style="position:relative">' + pic(p, cur.hex, true) + '</div></div>' +
 '<div class="flex flex-col p-6 sm:p-8"><div class="flex items-start justify-between gap-4"><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-clay">' + esc(p.category) + '</p><h2 class="mt-1 font-serif text-2xl font-extrabold leading-tight sm:text-3xl">' + esc(p.name) + '</h2></div>' +
 '<button type="button" data-close class="flex h-11 w-11 flex-none items-center justify-center rounded-full border border-line hover:border-ink" aria-label="Cerrar"><svg class="ic h-5 w-5" aria-hidden="true" focusable="false"><use href="#i-x"/></svg></button></div>' +
 '<p class="mt-3 text-xl"><span class="font-extrabold">' + fmt(p.price_cents) + '</span>' + (p.compare_at_cents ? ' <span class="text-base text-mute line-through">' + fmt(p.compare_at_cents) + '</span>' : "") + ' <span class="text-xs font-semibold text-mute">IVA incluido</span></p>' +
@@ -364,7 +373,7 @@ h = head("Iniciar sesión", "Entra para ver tus pedidos y comprar más rápido."
 h = head("Crear cuenta", "Tarda menos de un minuto.") +
 '<form data-form="register" novalidate>' + field("a-name", "Nombre", "text", "name", 'maxlength="60"') + field("a-email", "Correo electrónico", "email", "email", 'inputmode="email"') + field("a-pass", "Contraseña (mínimo 8 caracteres)", "password", "new-password", 'minlength="8" maxlength="128"') +
 '<label class="ac-chk"><input id="a-mkt" type="checkbox"><span>Quiero recibir novedades y ofertas por correo. Puedo darme de baja cuando quiera.</span></label>' +
-'<p class="ac-sub" style="margin:10px 0 0;font-size:.75rem">Usaremos tus datos solo para gestionar tu cuenta y tus pedidos.</p>' +
+'<label class="tx"><input id="a-terms" type="checkbox"><span>He leído y acepto la <a href="/legal.html#privacidad" target="_blank" rel="noopener">política de privacidad</a>. Usaremos tus datos solo para gestionar tu cuenta y tus pedidos.</span></label>' +
 '<div id="a-msg" role="alert"></div><button class="ac-btn" type="submit">Crear cuenta</button></form>' +
 '<div class="ac-row"><button type="button" class="ac-link" data-go="login">Ya tengo cuenta</button></div>';
 } else if (view === "forgot") {
@@ -422,9 +431,10 @@ var email = v("a-email").trim(), pass = v("a-pass");
 if (kind !== "delete" && kind !== "reset" && !/^\S+@\S+\.\S+$/.test(email)) { setMsg("Escribe un correo válido.", false); return; }
 if ((kind === "register" || kind === "reset") && pass.length < 8) { setMsg("La contraseña debe tener al menos 8 caracteres.", false); return; }
 if (kind === "register" && !v("a-name").trim()) { setMsg("Escribe tu nombre.", false); return; }
+if (kind === "register" && !$("a-terms").checked) { setMsg("Debes aceptar la política de privacidad para crear la cuenta.", false); return; }
 btn.disabled = true;
 var req = kind === "login" ? apiPost("/api/auth/login", { email: email, password: pass })
-: kind === "register" ? apiPost("/api/auth/register", { name: v("a-name"), email: email, password: pass, marketing: $("a-mkt").checked })
+: kind === "register" ? apiPost("/api/auth/register", { name: v("a-name"), email: email, password: pass, marketing: $("a-mkt").checked, terms: $("a-terms").checked })
 : kind === "forgot" ? apiPost("/api/auth/forgot", { email: email })
 : kind === "reset" ? apiPost("/api/auth/reset", { token: resetToken, password: pass })
 : apiPost("/api/auth/delete", { password: pass });
