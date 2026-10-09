@@ -10,3 +10,6 @@ migracion-002-productos-legal.sql
 NUEVO-CLIENTE.md
 wrangler.staging.jsonc
 .github
+node_modules
+package.json
+package-lock.json
