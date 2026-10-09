@@ -10,5 +10,6 @@
       "database_id": "e3253bea-4188-44be-8f9b-ce515d437380"
     }
   ],
+  "vars": { "MAIL_FROM": "agencia39700@gmail.com", "MAIL_FROM_NAME": "Horizonte", "BREVO_LIST_ID": "5", "STORE_NAME": "Horizonte" },
   "observability": { "enabled": true }
 }
