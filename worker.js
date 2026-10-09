@@ -47,6 +47,7 @@ export default {
       return new Response("No encontrado", { status: 404 });
     } catch (err) {
       console.error("Error no controlado:", err && err.message);
+      ctx.waitUntil(alertOwner(env, "Error interno en " + path, err && err.message));
       return json({ error: "Error interno" }, 500);
     }
   },
@@ -270,7 +271,15 @@ async function webhook(request, env, ctx) {
   if (!s) return new Response("ok", { status: 200 });
 
   if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
-    if (s.payment_status === "paid") await markPaid(env, s, ctx, publicOrigin(env, request));
+    if (s.payment_status === "paid") {
+      try { await markPaid(env, s, ctx, publicOrigin(env, request)); }
+      catch (err) {
+        // Un pago cobrado que no se registra es lo más grave: avisamos y devolvemos 500 para que Stripe reintente
+        console.error("markPaid falló:", err && err.message);
+        ctx.waitUntil(alertOwner(env, "Pago cobrado sin registrar (" + s.id + ")", err && err.message));
+        return new Response("Error", { status: 500 });
+      }
+    }
   } else if (event.type === "checkout.session.expired" || event.type === "checkout.session.async_payment_failed") {
     const o = await env.DB.prepare("SELECT id FROM orders WHERE stripe_session_id = ?1").bind(s.id).first();
     if (o) await releaseOrder(env, o.id, "expired");
@@ -634,6 +643,19 @@ async function me(request, env) {
 const escHtml = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const eur = (c) => (c / 100).toFixed(2).replace(".", ",") + " €";
 const storeName = (env) => env.STORE_NAME || "Horizonte";
+
+// Aviso de errores al dueño. Máximo uno por tipo cada 15 min por instancia, para no inundar el correo.
+const alertSeen = new Map();
+async function alertOwner(env, title, detail) {
+  try {
+    if (!env.OWNER_EMAIL) return;
+    const now = Date.now();
+    if (now - (alertSeen.get(title) || 0) < 15 * 60 * 1000) return;
+    alertSeen.set(title, now);
+    const inner = `<p style="font-size:14px;line-height:1.5">Se ha producido un problema en la tienda.</p><p style="font-size:13px;background:#f6f4f0;padding:10px 12px;border-radius:8px;word-break:break-word">${escHtml(String(detail || "sin detalle").slice(0, 300))}</p><p style="font-size:13px;color:#6b6a66">Revisa los registros del Worker en Cloudflare (Observability).</p>`;
+    await sendMail(env, env.OWNER_EMAIL, "", "⚠️ " + storeName(env) + ": " + title, layout(env, title, inner));
+  } catch (e) { console.error("alertOwner", e && e.message); }
+}
 
 async function sendMail(env, to, toName, subject, html) {
   if (!env.BREVO_API_KEY || !env.MAIL_FROM) { console.log("Correo no enviado (falta BREVO_API_KEY o MAIL_FROM):", subject); return false; }
