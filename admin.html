@@ -38,7 +38,17 @@ var $ = function (id) { return document.getElementById(id); };
 var eur = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 var token = sessionStorage.getItem("hz_admin") || "", data = null;
-var ESTADOS = { paid: ["Pagado", "bg-emerald-100 text-emerald-800"], pending: ["Pendiente", "bg-amber-100 text-amber-800"], expired: ["Caducado", "bg-stone-200 text-stone-700"], cancelled: ["Cancelado", "bg-stone-200 text-stone-700"], failed: ["Fallido", "bg-red-100 text-red-800"] };
+var ESTADOS = { paid: ["Pagado", "bg-emerald-100 text-emerald-800"], pending: ["Pendiente", "bg-amber-100 text-amber-800"], expired: ["Caducado", "bg-stone-200 text-stone-700"], cancelled: ["Cancelado", "bg-stone-200 text-stone-700"], failed: ["Fallido", "bg-red-100 text-red-800"], shipped: ["Enviado", "bg-sky-100 text-sky-800"], ready: ["Listo para recoger", "bg-sky-100 text-sky-800"] };
+function entrega(o) {
+if (["paid", "shipped", "ready"].indexOf(o.status) < 0) { return "—"; }
+var pick = o.fulfillment === "pickup", a = null, h = "";
+try { a = o.shipping_address ? JSON.parse(o.shipping_address) : null; } catch (x) { a = null; }
+h = pick ? "<strong>Recogida en tienda</strong>" : (a ? esc([a.name, a.line1, a.line2, ((a.postal_code || "") + " " + (a.city || "")).trim(), a.country].filter(Boolean).join(", ")) : "Sin dirección");
+if (o.status === "paid") {
+h += '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' + (pick ? "" : '<input id="c' + o.id + '" placeholder="Transportista" aria-label="Transportista del pedido ' + o.id + '" class="rounded-lg border border-line p-2" style="width:130px"><input id="t' + o.id + '" placeholder="Nº de seguimiento" aria-label="Seguimiento del pedido ' + o.id + '" class="rounded-lg border border-line p-2" style="width:150px">') + '<button type="button" data-ful="' + o.id + '" class="rounded-full bg-ink px-4 py-2 text-xs font-bold text-white">' + (pick ? "Avisar: listo para recoger" : "Marcar enviado y avisar") + '</button></div><span id="fm' + o.id + '" class="text-xs font-bold"></span>';
+} else if (o.status === "shipped") { h += '<br><span class="text-xs text-mute">' + esc((o.carrier || "") + " " + (o.tracking || "")) + "</span>"; }
+return h;
+}
 function api(path, opts) { opts = opts || {}; opts.headers = Object.assign({ Authorization: "Bearer " + token, "Content-Type": "application/json" }, opts.headers || {}); return fetch(path, opts).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, d: d }; }); }); }
 function load() {
 return api("/api/admin/summary").then(function (r) {
@@ -49,8 +59,8 @@ data = r.d; $("login").classList.add("hidden"); $("panel").classList.remove("hid
 function render() {
 $("st-n").textContent = data.stats.paid_orders; $("st-eur").textContent = eur.format(data.stats.paid_cents / 100);
 $("st-stock").textContent = data.variants.reduce(function (a, v) { return a + v.stock; }, 0);
-$("orders").innerHTML = data.orders.length ? '<table class="w-full text-left text-sm"><thead class="bg-sand text-xs uppercase tracking-wide text-mute"><tr><th class="px-4 py-3">Nº</th><th class="px-4 py-3">Estado</th><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Artículos</th><th class="px-4 py-3 text-right">Total</th></tr></thead><tbody>' +
-data.orders.map(function (o) { var e = ESTADOS[o.status] || [o.status, "bg-stone-200"]; return '<tr class="border-t border-line align-top"><td class="px-4 py-3 font-bold">#' + o.id + '</td><td class="px-4 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-bold ' + e[1] + '">' + e[0] + '</span></td><td class="px-4 py-3">' + esc(o.name || "—") + '<br><span class="text-xs text-mute">' + esc(o.email || "") + '</span></td><td class="px-4 py-3">' + o.items.map(function (i) { return esc(i.qty + " × " + i.name); }).join("<br>") + '</td><td class="px-4 py-3 text-right font-bold">' + eur.format(o.total_cents / 100) + "</td></tr>"; }).join("") + "</tbody></table>" : '<p class="p-6 text-sm text-mute">Todavía no hay pedidos. Haz una compra de prueba en la tienda.</p>';
+$("orders").innerHTML = data.orders.length ? '<table class="w-full text-left text-sm"><thead class="bg-sand text-xs uppercase tracking-wide text-mute"><tr><th class="px-4 py-3">Nº</th><th class="px-4 py-3">Estado</th><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Artículos</th><th class="px-4 py-3">Entrega</th><th class="px-4 py-3 text-right">Total</th></tr></thead><tbody>' +
+data.orders.map(function (o) { var e = ESTADOS[o.status] || [o.status, "bg-stone-200"]; return '<tr class="border-t border-line align-top"><td class="px-4 py-3 font-bold">#' + o.id + '</td><td class="px-4 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-bold ' + e[1] + '">' + e[0] + '</span></td><td class="px-4 py-3">' + esc(o.name || "—") + '<br><span class="text-xs text-mute">' + esc(o.email || "") + '</span></td><td class="px-4 py-3">' + o.items.map(function (i) { return esc(i.qty + " × " + i.name); }).join("<br>") + '</td><td class="px-4 py-3">' + entrega(o) + '</td><td class="px-4 py-3 text-right font-bold">' + eur.format(o.total_cents / 100) + "</td></tr>"; }).join("") + "</tbody></table>" : '<p class="p-6 text-sm text-mute">Todavía no hay pedidos. Haz una compra de prueba en la tienda.</p>';
 var f = $("filtro").value.trim().toLowerCase();
 $("stock").innerHTML = data.variants.filter(function (v) { return !f || (v.product + " " + v.color_name + " " + v.size).toLowerCase().indexOf(f) >= 0; }).map(function (v) {
 return '<tr class="border-t border-line"><td class="px-4 py-2 font-semibold">' + esc(v.product) + '</td><td class="px-4 py-2">' + esc(v.color_name) + '</td><td class="px-4 py-2">' + esc(v.size) + '</td><td class="px-4 py-2"><label class="sr-only" for="s' + v.id + '">Stock</label><input id="s' + v.id + '" type="number" min="0" max="10000" value="' + v.stock + '" class="w-24 rounded-lg border border-line p-2 ' + (v.stock === 0 ? "bg-red-50" : "") + '"></td><td class="px-4 py-2"><button type="button" data-save="' + v.id + '" class="min-h-[40px] rounded-full bg-ink px-4 text-xs font-bold text-white hover:bg-clay">Guardar</button> <span id="m' + v.id + '" class="ml-1 text-xs font-bold text-emerald-700"></span></td></tr>';
@@ -58,6 +68,15 @@ return '<tr class="border-t border-line"><td class="px-4 py-2 font-semibold">' +
 }
 $("login").addEventListener("submit", function (e) { e.preventDefault(); token = $("tok").value; sessionStorage.setItem("hz_admin", token); $("login-err").classList.add("hidden"); load(); });
 $("filtro").addEventListener("input", function () { if (data) { render(); } });
+$("orders").addEventListener("click", function (e) {
+var b = e.target.closest("[data-ful]"); if (!b) { return; }
+var id = +b.dataset.ful, c = $("c" + id), t = $("t" + id), m = $("fm" + id);
+b.disabled = true;
+api("/api/admin/fulfill", { method: "POST", body: JSON.stringify({ orderId: id, carrier: c ? c.value : "", tracking: t ? t.value : "" }) }).then(function (r) {
+if (r.ok) { load(); return; }
+b.disabled = false; m.textContent = r.d.error || "Error"; m.className = "text-xs font-bold text-red-700";
+});
+});
 $("stock").addEventListener("click", function (e) {
 var b = e.target.closest("[data-save]"); if (!b) { return; }
 var id = +b.dataset.save, val = parseInt($("s" + id).value, 10);

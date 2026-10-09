@@ -4,3 +4,5 @@ schema.sql
 seed.sql
 assetsignore.txt
 README.md
+migracion-001-cuentas.sql
+LEEME.md
