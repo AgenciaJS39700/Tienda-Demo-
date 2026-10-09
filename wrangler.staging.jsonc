@@ -1,0 +1,22 @@
+{
+  // Entorno de PRUEBAS: Worker, D1 y R2 propios. No toca la demo ni a ningún cliente.
+  // Despliegue:  npx wrangler deploy -c wrangler.staging.jsonc
+  "name": "tienda-demo-staging",
+  "main": "worker.js",
+  "compatibility_date": "2026-04-04",
+  "assets": { "directory": "./" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "tienda-demo-staging", "database_id": "97f72694-20dc-48d6-be9d-740b99edf09e" }
+  ],
+  "r2_buckets": [ { "binding": "IMAGES", "bucket_name": "tienda-demo-staging-img" } ],
+  "vars": {
+    "MAIL_FROM": "agencia39700@gmail.com",
+    "MAIL_FROM_NAME": "Horizonte (pruebas)",
+    "STORE_NAME": "Horizonte (pruebas)",
+    "OWNER_EMAIL": "agencia39700@gmail.com",
+    "SHOP_LEGAL_NAME": "Entorno de pruebas",
+    "SHOP_NIF": "B00000000 (ficticio)",
+    "SHOP_ADDRESS": "Datos ficticios"
+  },
+  "observability": { "enabled": true }
+}
